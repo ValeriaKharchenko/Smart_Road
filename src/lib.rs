@@ -7,10 +7,10 @@ pub const CAR_HEIGHT: f32 = 10_f32;
 pub const CAR_LENGTH: f32 = 30_f32;
 
 const CAR_SPEED_NORMAL: f32 = 1.5;
-const CAR_SPEED_SLOW: f32 = 0.2;
+const CAR_SPEED_SLOW: f32 = 0.3;
 const CAR_SPEED_FAST: f32 = 3.5;
 
-const BEFORE_CROSS_ROAD: Vec2 = vec2(250.0, 530.0);
+const BEFORE_CROSS_ROAD: Vec2 = vec2(220.0, 560.0);
 const AFTER_CROSS_ROAD: Vec2 = vec2(300.0, 480.0);
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -104,6 +104,10 @@ impl Car {
         return self.speed.0.abs() == CAR_SPEED_FAST || self.speed.1.abs() == CAR_SPEED_FAST;
     }
 
+    fn is_slow_down(&self) -> bool {
+        return self.speed.0.abs() == CAR_SPEED_SLOW || self.speed.1.abs() == CAR_SPEED_SLOW;
+    }
+
     fn slow_down(&mut self) {
         self.speed = match self.direction {
             Direction::Down => (0.0, CAR_SPEED_SLOW),
@@ -160,9 +164,10 @@ impl Route {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Intersection {
-    tracks: HashMap<Route, Vec<Car>>,
+    tracks: HashMap<Route, Vec<u32>>,
     car_id: u32,
     occupied_tracks: HashMap<Route, HashSet<u32>>,
+    cars: HashMap<u32, Car>,
 }
 
 impl Intersection {
@@ -171,6 +176,7 @@ impl Intersection {
             tracks: HashMap::new(),
             car_id: 0,
             occupied_tracks: HashMap::new(),
+            cars: HashMap::new(),
         }
     }
 
@@ -200,10 +206,10 @@ impl Intersection {
             Some(value) => value.to_vec(),
             None => Vec::new(),
         };
-        cars.push(car);
+        cars.push(car.id);
         self.tracks.get_mut(&route);
         self.tracks.insert(route, cars.clone());
-        // println!("{:?}", self.tracks);
+        self.cars.insert(car.id, car);
     }
 
     fn can_add(&mut self, route: Route) -> bool {
@@ -211,7 +217,8 @@ impl Intersection {
         let cars = self.tracks.get(&route);
         return match cars {
             Some(cars) => {
-                let last_car_position = cars.as_slice().last().unwrap().position;
+                let last_car_id = cars.as_slice().last().unwrap();
+                let last_car_position = self.cars.get(last_car_id).unwrap().position;
                 if route == Route::N_S && last_car_position.y <= start_coordinates.y + CAR_LENGTH * 2.0 {
                     return false;
                 }
@@ -232,30 +239,38 @@ impl Intersection {
 
     pub fn draw_cars(&self) {
         for (_route, cars) in self.tracks.iter() {
-            cars.iter().for_each(|car| {
+            cars.iter().for_each(|id| {
+                let car = self.cars.get(id).unwrap();
                 car.draw();
             })
         }
     }
 
     pub fn drive_cars(&mut self) {
-        for (route, cars) in self.tracks.iter_mut() {
-            for mut car in cars.iter_mut() {
+        let mut can_go = true;
+        let mut not_speed_up = true;
+        for (_, car) in self.cars.iter() {
+                not_speed_up = not_speed_up && !car.is_speed_up();
+        }
+        let mut cars = self.cars.clone();
+        for (route, cars_ids) in self.tracks.iter() {
+            for (ind, car_id) in cars_ids.iter().enumerate() {
                 let cars_on_cross_road = self.occupied_tracks.get(route);
-                let mut can_go = true;
+                // let mut cars = self.cars.borrow_mut();
+                let mut car: &mut Car = self.cars.get_mut(car_id).unwrap();
                 route.not_allowed_to_go().iter().for_each(|r| {
-                    can_go = can_go && self.occupied_tracks.get(r).is_none();
+                    can_go = can_go && self.occupied_tracks.get(r).is_none() || can_go && not_speed_up;
                 });
+
                 if !cars_on_cross_road.is_none() {
                     let mut all_cars = cars_on_cross_road.unwrap().clone();
                     if car.on_cross_road() && !car.is_speed_up() {
                         if can_go {
-                            all_cars.insert(car.id);
                             car.speed_up();
                         } else {
-                            all_cars.insert(car.id);
                             car.slow_down();
                         }
+                        all_cars.insert(car.id);
                     } else if car.after_cross_road() {
                         all_cars.remove(&car.id);
                         car.speed = route.get_speed();
@@ -273,6 +288,14 @@ impl Intersection {
                         car.slow_down();
                     }
                     self.occupied_tracks.insert(*route, cars);
+                }
+                if car.before_cross_road() && ind >= 1 {
+                    // let prev_car = self.cars.get(&cars_ids[ind-1]).unwrap();
+                    if cars.get(&cars_ids[ind-1]).unwrap().is_slow_down() {
+                        car.slow_down();
+                    } else {
+                        car.speed = route.get_speed();
+                    }
                 }
                 car.drive();
             }
