@@ -55,11 +55,4 @@ pub fn road() {
         draw_line(480.0, 450.0, 800.0, 450.0, 1.0, GRAY);
         draw_line(480.0, 480.0, 800.0, 480.0, 1.0, RED);
     }
-    // {
-    //     draw_circle(220.0, 220.0, 5.0, RED);
-    //     draw_circle(220.0, 560.0, 5.0, RED);
-    //     draw_circle(560.0, 560.0, 5.0, RED);
-    //     draw_circle(560.0, 220.0, 5.0, RED);
-    // }
-
 }
