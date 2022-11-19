@@ -1,7 +1,8 @@
 use std::borrow::{Borrow, BorrowMut};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use macroquad::color::Color;
 use macroquad::prelude::*;
+use crate::miniquad::native::apple::frameworks::sel;
 
 pub const CAR_HEIGHT: f32 = 10_f32;
 pub const CAR_LENGTH: f32 = 30_f32;
@@ -10,8 +11,9 @@ const CAR_SPEED_NORMAL: f32 = 1.5;
 const CAR_SPEED_SLOW: f32 = 0.3;
 const CAR_SPEED_FAST: f32 = 3.5;
 
-const BEFORE_CROSS_ROAD: Vec2 = vec2(170.0, 610.0);
+const BEFORE_CROSS_ROAD: Vec2 = vec2(200.0, 580.0);
 const AFTER_CROSS_ROAD: Vec2 = vec2(300.0, 480.0);
+// const AFTER_FIRST_INTERSECTION: Vec2 = vec2(350.0, 430.0);
 
 pub const COLORS: &'static [Color] = &[LIME, RED, SKYBLUE, VIOLET, GREEN, GRAY, MAROON, MAGENTA];
 
@@ -87,6 +89,15 @@ impl Car {
             Direction::Down => self.position.y < BEFORE_CROSS_ROAD.x,
             Direction::Up => self.position.y > BEFORE_CROSS_ROAD.y,
         }
+    }
+
+    fn in_stop_zone(&self) -> bool {
+        return match self.direction {
+                    Direction::Right => self.position.x > AFTER_CROSS_ROAD.x - CAR_LENGTH,
+                    Direction::Left => self.position.x < AFTER_CROSS_ROAD.y,
+                    Direction::Down => self.position.y > AFTER_CROSS_ROAD.x - CAR_LENGTH,
+                    Direction::Up => self.position.y < AFTER_CROSS_ROAD.y,
+                }
     }
 
     fn after_cross_road(&self) -> bool {
@@ -202,6 +213,15 @@ impl Car {
             _ => return,
         }
     }
+
+    fn drive_away(&self) -> bool {
+        return match self.direction {
+            Direction::Right => self.position.x > 800.0,
+            Direction::Left => self.position.x < 0.0,
+            Direction::Down => self.position.y > 800.0,
+            Direction::Up => self.position.y < 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
@@ -306,6 +326,7 @@ pub struct Intersection {
     car_id: u32,
     occupied_tracks: HashMap<Route, HashSet<u32>>,
     cars: HashMap<u32, Car>,
+    queue: VecDeque<u32>,
 }
 
 impl Intersection {
@@ -315,6 +336,7 @@ impl Intersection {
             car_id: 0,
             occupied_tracks: HashMap::new(),
             cars: HashMap::new(),
+            queue: VecDeque::new(),
         }
     }
 
@@ -349,6 +371,7 @@ impl Intersection {
             Some(value) => value.to_vec(),
             None => Vec::new(),
         };
+        // self.queue.push_back(car.id);
         cars.push(car.id);
         self.tracks.get_mut(&route);
         self.tracks.insert(route, cars.clone());
@@ -357,7 +380,7 @@ impl Intersection {
 
     fn can_add(&mut self, route: Route) -> bool {
         let start_coordinates = route.get_coordinates();
-        let cars = self.tracks.get(&route);
+        let mut cars = self.tracks.get_mut(&route);
         return match cars {
             Some(cars) => {
                 let last_car_id = cars.as_slice().last().unwrap();
@@ -395,10 +418,9 @@ impl Intersection {
                 let mut cars = self.cars.clone();
                 let cars_on_cross_road = self.occupied_tracks.get(route);
                 let mut car: &mut Car = self.cars.get_mut(car_id).unwrap();
-                let mut can_go = true;
+                let mut can_go = route.not_allowed_to_go().len() == 0 || self.queue.is_empty() || self.queue[0] == car.id;
 
                 route.not_allowed_to_go().iter().for_each(|r| {
-                    // let mut not_speed_up = self.tracks.
                     let not_speed_up = match self.occupied_tracks.get(r) {
                         Some(a) => {
                             let mut res = true;
@@ -414,11 +436,18 @@ impl Intersection {
 
                 if !cars_on_cross_road.is_none() {
                     let mut all_cars = cars_on_cross_road.unwrap().clone();
-                    if car.on_cross_road() && !car.is_speed_up() {
+                    if !car.before_cross_road() && !car.is_speed_up() {
                         if can_go {
                             car.speed_up();
+                            if !self.queue.is_empty() && self.queue[0] == car.id {
+                                self.queue.pop_front();
+                            }
+                            println!("Q1:{:?}", self.queue)
                         } else {
                             car.slow_down();
+                            if !self.queue.contains(&car.id) {
+                                self.queue.push_back(car.id);
+                            }
                         }
                         all_cars.insert(car.id);
                     } else if car.after_cross_road() {
@@ -433,28 +462,80 @@ impl Intersection {
                     let cars = HashSet::from_iter(vec![car.id]);
                     if can_go {
                         car.speed_up();
+                        if !self.queue.is_empty() && self.queue[0] == car.id {
+                            self.queue.pop_front();
+                        }
+                        println!("Q2:{:?}", self.queue)
                     } else {
                         car.slow_down();
+                        if !self.queue.contains(&car.id) {
+                            self.queue.push_back(car.id);
+                        }
                     }
                     self.occupied_tracks.insert(*route, cars);
                 }
                 if car.before_cross_road() && ind >= 1 {
-                    // let prev_car = self.cars.get(&cars_ids[ind-1]).unwrap();
                     if cars.get(&cars_ids[ind - 1]).unwrap().is_slow_down() {
                         car.slow_down();
                     } else {
                         car.speed = route.get_speed();
                     }
                 }
-                car.drive();
+                let mut car_clone = car.clone();
+                car_clone.drive();
+                if (car_clone.is_speed_up() || !car_clone.in_stop_zone())&& !cars.values().any(|c| {
+                    c.id != car_clone.id && intersect(car_clone.position, c.position,
+                                                      vec2(car_clone.position.x + car_clone.rectangle.0 + 5.0, car_clone.position.y + car_clone.rectangle.1 + 5.0),
+                                                      vec2(c.position.x + c.rectangle.0 + 5.0, c.position.y + c.rectangle.1 + 5.0))
+                }) {
+                    car.drive();
+                    // if car.drive_away() {
+                    //     self.cars.remove(car_id);
+                    //     let mut left_cars = self.tracks.get_mut(route);
+                    //     if !left_cars.is_none() {
+                    //         let retained = left_cars.unwrap().retain(|id| id != car_id);
+                    //         self.tracks.insert(*route,retained);
+                    //     }
+                    // }
+                }
             }
         }
     }
 }
 
 fn generate_route(routes: Vec<Route>) -> Route {
-    // println!("{:?}", routes);
     let n: usize = rand::gen_range(0, routes.len());
-    // println!("{:?}, {:?}", n, routes[n]);
     return routes[n];
+}
+
+fn intersect(a: Vec2, b: Vec2, c: Vec2, d: Vec2) -> bool {
+    return (
+        (
+            (
+                (a.x >= b.x && a.x <= d.x) || (c.x >= b.x && c.x <= d.x)
+            ) && (
+                (a.y >= b.y && a.y <= d.y) || (c.y >= b.y && c.y <= d.y)
+            )
+        ) || (
+            (
+                (b.x >= a.x && b.x <= c.x) || (d.x >= a.x && d.x <= c.x)
+            ) && (
+                (b.y >= a.y && b.y <= c.y) || (d.y >= a.y && d.y <= c.y)
+            )
+        )
+    ) || (
+        (
+            (
+                (a.x >= b.x && a.x <= d.x) || (c.x >= b.x && c.x <= d.x)
+            ) && (
+                (b.y >= a.y && b.y <= c.y) || (d.y >= a.y && d.y <= c.y)
+            )
+        ) || (
+            (
+                (b.x >= a.x && b.x <= c.x) || (d.x >= a.x && d.x <= c.x)
+            ) && (
+                (a.y >= b.y && a.y <= d.y) || (c.y >= b.y && c.y <= d.y)
+            )
+        )
+    );
 }
