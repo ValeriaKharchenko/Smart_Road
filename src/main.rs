@@ -89,31 +89,32 @@ async fn main() {
 
                 //Draw new car with direction from right to left
                 if is_key_pressed(KeyCode::Left) {
-                    let routes = vec![Route::E_W];
+                    let routes = vec![Route::E_W, Route::E_N, Route::E_S];
                     intersection.add_car(routes);
                 }
 
                 //Draw new car with direction from left to right
                 if is_key_pressed(KeyCode::Right) {
-                    let routes = vec![Route::W_E];
+                    let routes = vec![Route::W_E, Route::W_S, Route::W_N];
                     intersection.add_car(routes);
                 }
 
                 //Draw new car with direction from bottom to top
                 if is_key_pressed(KeyCode::Up) {
-                    let routes = vec![Route::S_N];
+                    let routes = vec![Route::S_N, Route::S_E, Route::S_W];
                     intersection.add_car(routes);
                 }
 
                 //Draw new car with direction from top to bottom
                 if is_key_pressed(KeyCode::Down) {
-                    let routes = vec![Route::N_S];
+                    let routes = vec![Route::N_S, Route::N_W, Route::N_E];
                     intersection.add_car(routes);
                 }
 
                 //Draw new car with a random direction
                 if is_key_pressed(KeyCode::R) {
-                    let routes = vec![Route::E_W, Route::W_E, Route::S_N, Route::N_S];
+                    let routes = vec![Route::E_W, Route::W_E, Route::S_N, Route::N_S, Route::E_N, Route::W_S, Route::N_W, Route::S_E, Route::N_E, Route::S_W, Route::W_N, Route::E_S];
+                    // let routes = vec![ Route::N_W, Route::N_E, Route::S_W];
                     intersection.add_car(routes);
                 }
 
@@ -121,7 +122,6 @@ async fn main() {
                 if is_key_pressed(KeyCode::Escape) {
                     game_state = GameState::Statistics
                 }
-
             }
 
             GameState::Statistics => {

@@ -10,8 +10,10 @@ const CAR_SPEED_NORMAL: f32 = 1.5;
 const CAR_SPEED_SLOW: f32 = 0.3;
 const CAR_SPEED_FAST: f32 = 3.5;
 
-const BEFORE_CROSS_ROAD: Vec2 = vec2(220.0, 560.0);
+const BEFORE_CROSS_ROAD: Vec2 = vec2(170.0, 610.0);
 const AFTER_CROSS_ROAD: Vec2 = vec2(300.0, 480.0);
+
+pub const COLORS: &'static [Color] = &[LIME, RED, SKYBLUE, VIOLET, GREEN, GRAY, MAROON, MAGENTA];
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Direction {
@@ -36,6 +38,8 @@ pub struct Car {
     pub speed: (f32, f32),
     pub rectangle: (f32, f32),
     pub direction: Direction,
+    pub route: Route,
+    pub turned: bool,
 }
 
 
@@ -47,6 +51,8 @@ impl Car {
         speed: (f32, f32),
         id: u32,
         direction: Direction,
+        route: Route,
+        turned: bool,
     ) -> Car {
         Car {
             color,
@@ -55,10 +61,15 @@ impl Car {
             speed,
             id,
             direction,
+            route,
+            turned,
         }
     }
 
     pub fn drive(&mut self) {
+        if self.on_turn_point() && !self.turned {
+            self.turn();
+        }
         self.position = (
             vec2(self.position.x + self.speed.0,
                  self.position.y + self.speed.1, )
@@ -116,6 +127,81 @@ impl Car {
             Direction::Left => (-CAR_SPEED_SLOW, 0.0),
         }
     }
+
+    fn on_turn_point(&self) -> bool {
+        return match self.route {
+            Route::N_W => self.position.y > 300.0 && self.position.y < 350.0,
+            Route::S_E => self.position.y < 460.0 && self.position.y > 410.0,
+            Route::W_S => self.position.x > 300.0 && self.position.x < 350.0,
+            Route::E_N => self.position.x < 460.0 && self.position.x > 350.0,
+
+            Route::N_E => self.position.y > 390.0 && self.position.y < 440.0,
+            Route::S_W => self.position.y > 320.0 && self.position.y < 370.0,
+            Route::W_N => self.position.x > 390.0 && self.position.x < 440.0,
+            Route::E_S => self.position.x > 320.0 && self.position.x < 370.0,
+            _ => false,
+        };
+    }
+
+    fn turn(&mut self) {
+        let speed = self.speed;
+        let r = self.rectangle;
+        self.rectangle.0 = r.1;
+        self.rectangle.1 = r.0;
+        self.turned = true;
+
+        match self.route {
+            Route::N_E => {
+                self.speed.0 = speed.1;
+                self.speed.1 = speed.0;
+                self.direction = Direction::Right;
+                self.position.y = 400.0;
+            }
+            Route::S_W => {
+                self.speed.0 = speed.1;
+                self.speed.1 = speed.0;
+                self.direction = Direction::Left;
+                self.position.y = 370.0;
+            }
+            Route::W_N => {
+                self.speed.0 = -speed.1;
+                self.speed.1 = -speed.0;
+                self.direction = Direction::Up;
+                self.position.x = 400.0;
+            }
+            Route::E_S => {
+                self.speed.0 = -speed.1;
+                self.speed.1 = -speed.0;
+                self.direction = Direction::Down;
+                self.position.x = 370.0;
+            }
+            Route::N_W => {
+                self.speed.0 = -speed.1;
+                self.speed.1 = -speed.0;
+                self.direction = Direction::Left;
+                self.position.y = 310.0;
+            }
+            Route::S_E => {
+                self.speed.0 = -speed.1;
+                self.speed.1 = -speed.0;
+                self.position.y = 460.0;
+                self.direction = Direction::Right;
+            }
+            Route::W_S => {
+                self.direction = Direction::Down;
+                self.speed.0 = speed.1;
+                self.speed.1 = speed.0;
+                self.position.x = 310.0;
+            }
+            Route::E_N => {
+                self.direction = Direction::Up;
+                self.speed.0 = speed.1;
+                self.speed.1 = speed.0;
+                self.position.x = 460.0;
+            }
+            _ => return,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
@@ -124,6 +210,16 @@ pub enum Route {
     S_N,
     W_E,
     E_W,
+
+    N_W,
+    S_E,
+    W_S,
+    E_N,
+
+    N_E,
+    S_W,
+    W_N,
+    E_S,
 }
 
 impl Route {
@@ -133,31 +229,73 @@ impl Route {
             Route::S_N => vec2(430_f32, 800_f32),
             Route::W_E => vec2(0_f32 - CAR_LENGTH, 430_f32),
             Route::E_W => vec2(800_f32, 340_f32),
+
+            Route::N_W => vec2(310_f32, 0_f32 - CAR_LENGTH),
+            Route::S_E => vec2(460_f32, 800_f32),
+            Route::W_S => vec2(0_f32 - CAR_LENGTH, 460_f32),
+            Route::E_N => vec2(800_f32, 310_f32),
+
+            Route::N_E => vec2(370_f32, 0f32 - CAR_LENGTH),
+            Route::S_W => vec2(400_f32, 800_f32),
+            Route::W_N => vec2(0f32 - CAR_LENGTH, 400f32),
+            Route::E_S => vec2(800f32, 370f32),
         }
     }
     fn get_speed(&self) -> (f32, f32) {
         match *self {
             Route::N_S => (0.0, CAR_SPEED_NORMAL),
+            Route::N_W => (0.0, CAR_SPEED_NORMAL),
+            Route::N_E => (0.0, CAR_SPEED_NORMAL),
+
             Route::S_N => (0.0, -CAR_SPEED_NORMAL),
+            Route::S_E => (0.0, -CAR_SPEED_NORMAL),
+            Route::S_W => (0.0, -CAR_SPEED_NORMAL),
+
             Route::W_E => (CAR_SPEED_NORMAL, 0.0),
+            Route::W_S => (CAR_SPEED_NORMAL, 0.0),
+            Route::W_N => (CAR_SPEED_NORMAL, 0.0),
+
             Route::E_W => (-CAR_SPEED_NORMAL, 0.0),
+            Route::E_N => (-CAR_SPEED_NORMAL, 0.0),
+            Route::E_S => (-CAR_SPEED_NORMAL, 0.0),
         }
     }
     fn get_direction(&self) -> Direction {
         match *self {
             Route::N_S => Direction::Down,
+            Route::N_W => Direction::Down,
+            Route::N_E => Direction::Down,
+
             Route::S_N => Direction::Up,
+            Route::S_E => Direction::Up,
+            Route::S_W => Direction::Up,
+
             Route::W_E => Direction::Right,
+            Route::W_S => Direction::Right,
+            Route::W_N => Direction::Right,
+
             Route::E_W => Direction::Left,
+            Route::E_N => Direction::Left,
+            Route::E_S => Direction::Left,
         }
     }
 
     fn not_allowed_to_go(&self) -> Vec<Route> {
         match *self {
-            Route::N_S => vec![Route::E_W, Route::W_E],
-            Route::S_N => vec![Route::E_W, Route::W_E],
-            Route::W_E => vec![Route::N_S, Route::S_N],
-            Route::E_W => vec![Route::N_S, Route::S_N],
+            Route::N_S => vec![Route::E_W, Route::W_E, Route::W_N, Route::S_W],
+            Route::S_N => vec![Route::N_E, Route::W_E, Route::E_S, Route::E_W],
+            Route::W_E => vec![Route::N_S, Route::S_W, Route::S_N, Route::E_S],
+            Route::E_W => vec![Route::N_S, Route::N_E, Route::S_N, Route::W_N],
+
+            Route::N_W => vec![],
+            Route::S_E => vec![],
+            Route::W_S => vec![],
+            Route::E_N => vec![],
+
+            Route::N_E => vec![Route::E_W, Route::S_N, Route::S_W, Route::W_N, Route::E_S],
+            Route::S_W => vec![Route::N_S, Route::N_E, Route::W_E, Route::W_N, Route::E_S],
+            Route::W_N => vec![Route::N_S, Route::N_E, Route::S_W, Route::E_W, Route::E_S],
+            Route::E_S => vec![Route::N_E, Route::S_N, Route::S_W, Route::W_E, Route::W_N],
         }
     }
 }
@@ -185,20 +323,25 @@ impl Intersection {
         if !self.can_add(route) {
             return;
         }
+
         self.car_id += 1;
 
         let mut rectangle: (f32, f32) = (CAR_LENGTH, CAR_HEIGHT);
-        if route == Route::N_S || route == Route::S_N {
+        let direction = route.get_direction();
+        if direction == Direction::Up || direction == Direction::Down {
             rectangle = (CAR_HEIGHT, CAR_LENGTH);
         }
+        let n: usize = rand::gen_range(0, COLORS.len());
 
         let car = Car::new(
             route.get_coordinates(),
             rectangle,
-            RED,
+            COLORS[n],
             route.get_speed(),
             self.car_id,
-            route.get_direction(),
+            direction,
+            route,
+            false,
         );
 
         let current_cars_on_track = self.tracks.get_mut(&route);
@@ -219,16 +362,16 @@ impl Intersection {
             Some(cars) => {
                 let last_car_id = cars.as_slice().last().unwrap();
                 let last_car_position = self.cars.get(last_car_id).unwrap().position;
-                if route == Route::N_S && last_car_position.y <= start_coordinates.y + CAR_LENGTH * 2.0 {
+                if (route == Route::N_S || route == Route::N_W || route == Route::N_E) && last_car_position.y <= start_coordinates.y + CAR_LENGTH * 2.0 {
                     return false;
                 }
-                if route == Route::S_N && last_car_position.y + CAR_LENGTH * 2.0 >= start_coordinates.y {
+                if (route == Route::S_N || route == Route::S_E || route == Route::S_W) && last_car_position.y + CAR_LENGTH * 2.0 >= start_coordinates.y {
                     return false;
                 }
-                if route == Route::W_E && last_car_position.x <= start_coordinates.x + CAR_LENGTH * 2.0 {
+                if (route == Route::W_E || route == Route::W_S || route == Route::W_N) && last_car_position.x <= start_coordinates.x + CAR_LENGTH * 2.0 {
                     return false;
                 }
-                if route == Route::E_W && last_car_position.x + CAR_LENGTH * 2.0 >= start_coordinates.x {
+                if (route == Route::E_W || route == Route::E_N || route == Route::E_S) && last_car_position.x + CAR_LENGTH * 2.0 >= start_coordinates.x {
                     return false;
                 }
                 true
@@ -247,19 +390,26 @@ impl Intersection {
     }
 
     pub fn drive_cars(&mut self) {
-        let mut can_go = true;
-        let mut not_speed_up = true;
-        for (_, car) in self.cars.iter() {
-                not_speed_up = not_speed_up && !car.is_speed_up();
-        }
-        let mut cars = self.cars.clone();
         for (route, cars_ids) in self.tracks.iter() {
             for (ind, car_id) in cars_ids.iter().enumerate() {
+                let mut cars = self.cars.clone();
                 let cars_on_cross_road = self.occupied_tracks.get(route);
-                // let mut cars = self.cars.borrow_mut();
                 let mut car: &mut Car = self.cars.get_mut(car_id).unwrap();
+                let mut can_go = true;
+
                 route.not_allowed_to_go().iter().for_each(|r| {
-                    can_go = can_go && self.occupied_tracks.get(r).is_none() || can_go && not_speed_up;
+                    // let mut not_speed_up = self.tracks.
+                    let not_speed_up = match self.occupied_tracks.get(r) {
+                        Some(a) => {
+                            let mut res = true;
+                            a.iter().for_each(|f| {
+                                res = res && !cars.get(f).unwrap().is_speed_up();
+                            });
+                            res
+                        }
+                        None => true
+                    };
+                    can_go = can_go && (self.occupied_tracks.get(r).is_none() || not_speed_up);
                 });
 
                 if !cars_on_cross_road.is_none() {
@@ -273,7 +423,6 @@ impl Intersection {
                         all_cars.insert(car.id);
                     } else if car.after_cross_road() {
                         all_cars.remove(&car.id);
-                        car.speed = route.get_speed();
                     }
                     if all_cars.is_empty() {
                         self.occupied_tracks.remove(route);
@@ -291,7 +440,7 @@ impl Intersection {
                 }
                 if car.before_cross_road() && ind >= 1 {
                     // let prev_car = self.cars.get(&cars_ids[ind-1]).unwrap();
-                    if cars.get(&cars_ids[ind-1]).unwrap().is_slow_down() {
+                    if cars.get(&cars_ids[ind - 1]).unwrap().is_slow_down() {
                         car.slow_down();
                     } else {
                         car.speed = route.get_speed();
@@ -304,6 +453,8 @@ impl Intersection {
 }
 
 fn generate_route(routes: Vec<Route>) -> Route {
+    // println!("{:?}", routes);
     let n: usize = rand::gen_range(0, routes.len());
+    // println!("{:?}, {:?}", n, routes[n]);
     return routes[n];
 }
