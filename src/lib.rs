@@ -217,9 +217,9 @@ impl Car {
     fn drive_away(&self) -> bool {
         return match self.direction {
             Direction::Right => self.position.x > 800.0,
-            Direction::Left => self.position.x < 0.0,
+            Direction::Left => self.position.x < 0.0 - CAR_LENGTH,
             Direction::Down => self.position.y > 800.0,
-            Direction::Up => self.position.y < 0.0,
+            Direction::Up => self.position.y < 0.0 - CAR_LENGTH,
         }
     }
 }
@@ -327,6 +327,12 @@ pub struct Intersection {
     occupied_tracks: HashMap<Route, HashSet<u32>>,
     cars: HashMap<u32, Car>,
     queue: VecDeque<u32>,
+
+    pub number_of_passed_vehicles: u32,
+    pub max_velocity: f32,
+    pub min_velocity: f32,
+    pub collapse: u32,
+    pub close_calls: u32,
 }
 
 impl Intersection {
@@ -337,6 +343,11 @@ impl Intersection {
             occupied_tracks: HashMap::new(),
             cars: HashMap::new(),
             queue: VecDeque::new(),
+            number_of_passed_vehicles: 0,
+            max_velocity: 0.0,
+            min_velocity: 0.0,
+            collapse: 0,
+            close_calls: 0,
         }
     }
 
@@ -371,7 +382,6 @@ impl Intersection {
             Some(value) => value.to_vec(),
             None => Vec::new(),
         };
-        // self.queue.push_back(car.id);
         cars.push(car.id);
         self.tracks.get_mut(&route);
         self.tracks.insert(route, cars.clone());
@@ -442,7 +452,6 @@ impl Intersection {
                             if !self.queue.is_empty() && self.queue[0] == car.id {
                                 self.queue.pop_front();
                             }
-                            println!("Q1:{:?}", self.queue)
                         } else {
                             car.slow_down();
                             if !self.queue.contains(&car.id) {
@@ -465,7 +474,6 @@ impl Intersection {
                         if !self.queue.is_empty() && self.queue[0] == car.id {
                             self.queue.pop_front();
                         }
-                        println!("Q2:{:?}", self.queue)
                     } else {
                         car.slow_down();
                         if !self.queue.contains(&car.id) {
@@ -475,7 +483,7 @@ impl Intersection {
                     self.occupied_tracks.insert(*route, cars);
                 }
                 if car.before_cross_road() && ind >= 1 {
-                    if cars.get(&cars_ids[ind - 1]).unwrap().is_slow_down() {
+                    if !cars.get(&cars_ids[ind - 1]).is_none() && cars.get(&cars_ids[ind - 1]).unwrap().is_slow_down() {
                         car.slow_down();
                     } else {
                         car.speed = route.get_speed();
@@ -489,17 +497,29 @@ impl Intersection {
                                                       vec2(c.position.x + c.rectangle.0 + 5.0, c.position.y + c.rectangle.1 + 5.0))
                 }) {
                     car.drive();
-                    // if car.drive_away() {
-                    //     self.cars.remove(car_id);
-                    //     let mut left_cars = self.tracks.get_mut(route);
-                    //     if !left_cars.is_none() {
-                    //         let retained = left_cars.unwrap().retain(|id| id != car_id);
-                    //         self.tracks.insert(*route,retained);
-                    //     }
-                    // }
+                    if car.drive_away() {
+                        self.cars.remove(car_id);
+                        self.number_of_passed_vehicles += 1;
+                    }
                 }
             }
         }
+    }
+
+    pub fn remove_cars(&mut self) {
+        let mut map: HashMap<Route, Vec<u32>> = HashMap::new();
+        for(route, cars)in self.tracks.iter() {
+            let mut left_cars:Vec<u32> = vec![];
+                cars.iter().for_each(|c| {
+                if self.cars.contains_key(c) {
+                    left_cars.push(*c);
+                }
+            });
+            if left_cars.len() > 0 {
+                map.insert(*route, left_cars);
+            }
+        }
+        self.tracks = map;
     }
 }
 

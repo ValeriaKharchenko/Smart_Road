@@ -42,12 +42,12 @@ pub fn draw_title_text(text: &str) {
 }
 
 pub struct Statistics {
-    cars_finished: usize,
+    passed_intersection: u32,
 }
 
 impl Statistics {
     pub fn new() -> Self {
-        Self { cars_finished: 0 }
+        Self { passed_intersection: 0 }
     }
 }
 
@@ -70,7 +70,7 @@ fn window_conf() -> Conf {
 #[macroquad::main(window_conf)]
 async fn main() {
     let mut game_state = GameState::Menu;
-    let statistics = Statistics::new();
+    let mut statistics = Statistics::new();
     let mut intersection = Intersection::new();
 
     loop {
@@ -85,6 +85,7 @@ async fn main() {
                 //draw road
                 road();
                 intersection.drive_cars();
+                intersection.remove_cars();
                 intersection.draw_cars();
 
                 //Draw new car with direction from right to left
@@ -125,7 +126,8 @@ async fn main() {
             }
 
             GameState::Statistics => {
-                draw_title_text(&format!("STATISTICS: cars finished: {}", statistics.cars_finished));
+                statistics.passed_intersection = intersection.number_of_passed_vehicles;
+                draw_title_text(&format!("STATISTICS: cars finished: {}", statistics.passed_intersection));
             }
         }
 
